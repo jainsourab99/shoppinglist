@@ -15,27 +15,32 @@ class GroceryList extends StatefulWidget {
 
 class _GroceryListState extends State<GroceryList> {
   List<GroceryItem> _groceryItems = [];
-  late Future<List<GroceryItem>> _loadedItems;
+  var _isLoading = true; 
   String? error;
 
   @override
   void initState() {
     super.initState();
-    _loadedItems = _loadItems();
+    _loadItems();
   }
 
-  Future<List<GroceryItem>> _loadItems() async {
+  void _loadItems() async {
     final url = Uri.https(
         'flutter-prep-cdbea-default-rtdb.firebaseio.com', 'shopping-list.json');
 
     final response = await http.get(url);
 
     if (response.statusCode >= 400) {
-      throw Exception('failed to fetch please try again');
+      setState(() {
+              error = 'Failed to fetch the data. Please try again later';
+      });
     }
 
     if (response.body == 'null') {
-      return [];
+      setState(() {
+        _isLoading = false;
+      });
+      return;
     }
 
     final Map<String, dynamic> listData = json.decode(response.body);
@@ -55,7 +60,11 @@ class _GroceryListState extends State<GroceryList> {
         ),
       );
     }
-    return _loadedItem;
+    print(_loadedItem);
+    setState(() {
+      _groceryItems = _loadedItem;
+      _isLoading = false;
+    });
   }
 
   void _addItem() async {
@@ -78,8 +87,7 @@ class _GroceryListState extends State<GroceryList> {
     setState(() {
       _groceryItems.remove(item);
     });
-    final url = Uri.https('flutter-prep-cdbea-default-rtdb.firebaseio.com',
-        'shopping-list/${item.id}.json');
+    final url = Uri.https('flutter-prep-cdbea-default-rtdb.firebaseio.com', 'shopping-list/${item.id}.json');
     final response = await http.delete(url);
 
     if (response.statusCode >= 400) {
@@ -87,54 +95,48 @@ class _GroceryListState extends State<GroceryList> {
         _groceryItems.insert(index, item);
       });
     }
+    
   }
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Your Groceries'),
-        actions: [
-          IconButton(
-            onPressed: _addItem,
-            icon: const Icon(Icons.add),
-          )
-        ],
-      ),
-      body: FutureBuilder(
-        future: _loadedItems,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-          if (snapshot.hasError) {
-            return Center(
-              child: Text(snapshot.error.toString()),
-            );
-          }
-          if (snapshot.data!.isEmpty) {
-            return const Center(child: Text('No Items added yet.'));
-          }
-          return ListView.builder(
-            itemCount: snapshot.data!.length,
-            itemBuilder: (ctx, index) => Dismissible(
-              onDismissed: (direction) {
-                _removeItem(snapshot.data![index]);
-              },
-              key: ValueKey(snapshot.data![index].id),
-              child: ListTile(
-                title: Text(snapshot.data![index].name),
-                leading: Container(
-                  width: 24,
-                  height: 24,
-                  color: snapshot.data![index].category.color,
-                ),
-                trailing: Text(snapshot.data![index].quantity.toString()),
-              ),
+    Widget contant = const Center(child: Text('No Items added yet.'));
+    if (_isLoading) {
+      contant = const Center(child: CircularProgressIndicator());
+    }
+    if (_groceryItems.isNotEmpty) {
+      contant = ListView.builder(
+        itemCount: _groceryItems.length,
+        itemBuilder: (ctx, index) => Dismissible(
+          onDismissed: (direction) {
+            _removeItem(_groceryItems[index]);
+          },
+          key: ValueKey(_groceryItems[index].id),
+          child: ListTile(
+            title: Text(_groceryItems[index].name),
+            leading: Container(
+              width: 24,
+              height: 24,
+              color: _groceryItems[index].category.color,
             ),
-          );
-        },
-      ),
-    );
+            trailing: Text(_groceryItems[index].quantity.toString()),
+          ),
+        ),
+      );
+    }
+    if (error != null) {
+      contant = Center(child: Text(error!),);
+    }
+    return Scaffold(
+        appBar: AppBar(
+          title: const Text('Your Groceries'),
+          actions: [
+            IconButton(
+              onPressed: _addItem,
+              icon: const Icon(Icons.add),
+            )
+          ],
+        ),
+        body: contant);
   }
 }
